@@ -1,1 +1,3 @@
-__init__.py 
+from .hadoop import hadoop_router
+
+__all__ = ['hadoop_router']
