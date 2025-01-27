@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    FASTAPI_ENV: str = "development"
     # 应用基本配置
     APP_NAME: str = "Big Data Proxy Server"
     VERSION: str = "0.1"

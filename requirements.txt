@@ -1,8 +1,10 @@
 fastapi~=0.115.7
 uvicorn~=0.34.0
-
 pydantic-settings~=2.7.1
 pydantic~=2.10.5
 python-jose~=3.3.0
 httpx~=0.28.1
 docker~=7.1.0
+psycopg2-binary~=2.9.10
+python-dotenv~=1.0.1
+sqlalchemy~=2.0.37
