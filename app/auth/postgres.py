@@ -1,9 +1,12 @@
 from sqlalchemy import create_engine, Column, Integer, String, BLOB, TIMESTAMP
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import sessionmaker
 import os
+import utils as u
+from datetime import datetime, timezone
 from dotenv import load_dotenv
+from app.auth.utils import encrypt_key
 from app.utils.logger import logger
 from uuid import uuid4
 
@@ -11,19 +14,19 @@ from uuid import uuid4
 load_dotenv(dotenv_path='../../pg-docker/.env')
 
 DB_URL = (f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}"
-          f"@localhost:5432/{os.getenv('POSTGRES_DB')}")
+          f"@localhost:5432/{os.getenv('POSTGRES_DB')}?sslmode=disable")
 engine = create_engine(DB_URL, echo=True)
 Base = declarative_base()
 
 
 class User(Base):
-    __tablename__ = 'user'
+    __tablename__ = 'users'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
     api_key_encrypted = Column(BLOB, nullable=False)
-    created_at = Column(TIMESTAMP, default='CURRENT_TIMESTAMP')
+    created_at = Column(TIMESTAMP, default=datetime.now(timezone.utc))
 
 
 Session = sessionmaker(bind=engine)
@@ -36,7 +39,7 @@ class Database:
     def insert_user(self, username, password_hash, api_key_encrypted):
         try:
             user = User(username=username, password_hash=password_hash,
-                        api_key_encrypted=api_key_encrypted)
+                         api_key_encrypted=api_key_encrypted)
             self.session.add(user)
             self.session.commit()
             logger.info(f"User {username} inserted successfully.")
@@ -69,7 +72,7 @@ class Database:
                 logger.warning("User not found.")
                 return False
         except Exception as e:
-            print(f"Error updating password: {e}")
+            logger.error(f"Error updating password: {e}")
             self.session.rollback()
 
     def delete_user(self, user_id):
@@ -81,10 +84,27 @@ class Database:
             if user:
                 self.session.delete(user)
                 self.session.commit()
-                print(f"User {user.username} deleted.")
+                logger.info(f"User {user.username} deleted.")
             else:
-                print("User not found.")
+                logger.warning("User not found.")
         except Exception as e:
-            print(f"Error deleting user: {e}")
+            logger.error(f"Error deleting user: {e}")
             self.session.rollback()
+
+
+
+def creat_user(username: str, password: str):
+    hashed_pw = u.hash_password(password)
+    encrypt_api_key = u.encrypt_key(u.generate_secure_api_key())
+    db = Database()
+    db.insert_user(
+        username=username,
+        password_hash=hashed_pw,
+        api_key_encrypted=encrypt_api_key
+    )
+
+
+
+if __name__ == '__main__':
+    creat_user('jack', '0907')
 
