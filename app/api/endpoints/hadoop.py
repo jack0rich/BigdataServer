@@ -6,8 +6,8 @@ from app.models.request_models import (
     HadoopFileDelete
 )
 from app.models.response_models import (
-    HadoopFileResponse,
-    ErrorResponse, BaseResponse
+    HDFSFileResponse,
+    HDFSErrorResponse, BaseResponse
 )
 from app.core.security import api_key_auth
 
@@ -20,11 +20,11 @@ hadoop_router = APIRouter(
 
 @hadoop_router.post(
     "/upload",
-    response_model=HadoopFileResponse,
+    response_model=HDFSFileResponse,
     responses={
-        404: {"model": ErrorResponse},
-        409: {"model": ErrorResponse},
-        500: {"model": ErrorResponse}
+        404: {"model": HDFSErrorResponse},
+        409: {"model": HDFSErrorResponse},
+        500: {"model": HDFSErrorResponse}
     }
 )
 async def upload_file(
@@ -42,7 +42,7 @@ async def upload_file(
             blocksize=request.blocksize
         )
 
-        return HadoopFileResponse(
+        return HDFSFileResponse(
             success=True,
             hdfs_path=result["hdfs_path"],
             file_size=result["file_size"],
@@ -70,7 +70,7 @@ async def upload_file(
 @hadoop_router.delete(
     "/delete",
     response_model=BaseResponse,
-    responses={404: {"model": ErrorResponse}}
+    responses={404: {"model": HDFSErrorResponse}}
 )
 async def delete_path(request: HadoopFileDelete):
     """删除HDFS路径"""

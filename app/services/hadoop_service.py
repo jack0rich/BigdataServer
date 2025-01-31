@@ -8,7 +8,7 @@ class HadoopAPIClient:
     """Hadoop REST API 客户端封装"""
 
     def __init__(self):
-        self.base_url = f"https://{settings.HADOOP_NAMENODE}:{settings.HADOOP_WEB_PORT}/webhdfs/v1"
+        self.base_url = f"https://{settings.HADOOP_HOST}:{settings.HADOOP_PORT}/webhdfs/v1"
         self.client = httpx.AsyncClient()
         self.common_params = {
             "user.name": settings.HADOOP_USER,

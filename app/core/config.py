@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     AIRFLOW_HOST: str = "http://airflow-webserver"
     AIRFLOW_PORT: int = 8080
 
+    AIRFLOW_USERNAME: str = ''
+    AIRFLOW_PASSWORD: str = ''
+
     # Docker 集群管理配置
     DOCKER_API_URL: str = "http://docker-swarm-manager:2375"
 

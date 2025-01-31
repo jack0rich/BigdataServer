@@ -33,3 +33,22 @@ class HadoopFileDelete(BaseModel):
         False,
         description="是否递归删除目录"
     )
+
+class MLflowExperimentOperation(BaseModel):
+    """MLflow 实验操作基础请求模型"""
+    experiment_name: str = Field(..., description="实验名称")
+    artifact_location: Optional[str] = Field(None, description="实验工件存储路径")
+
+class MLflowExperimentDelete(BaseModel):
+    """MLflow 实验删除请求模型"""
+    experiment_id: str = Field(..., description="要删除的实验ID")
+
+class AirflowDagTrigger(BaseModel):
+    """Airflow DAG 触发请求模型"""
+    dag_id: str = Field(..., description="DAG ID")
+    conf: Optional[dict] = Field(None, description="DAG 运行配置参数")
+
+class AirflowDagDelete(BaseModel):
+    """Airflow DAG 删除请求模型"""
+    dag_id: str = Field(..., description="要删除的DAG ID")
+
