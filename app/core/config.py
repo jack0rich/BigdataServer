@@ -8,12 +8,13 @@ class Settings(BaseSettings):
     DESCRIPTION: str = ""
 
     # 服务器配置
-    HOST: str = "127.0.0.1"  # 监听的主机地址
+    HOST: str = "localhost"  # 监听的主机地址
     PORT: int = 8000       # 监听的端口
 
     # Hadoop 服务配置
-    HADOOP_HOST: str = "http://hadoop-cluster"
+    HADOOP_HOST: str = "localhost"
     HADOOP_PORT: int = 9870
+    HADOOP_USER: str = 'root'
 
     # MLflow 服务配置
     MLFLOW_HOST: str = "http://mlflow-server"

@@ -15,7 +15,7 @@ from app.api.endpoints import (
     hadoop_router,
     mlflow_router,
     airflow_router,
-    system_router
+    # system_router
 )
 from app.utils import logger
 from app.utils.docker_client import docker_client
@@ -149,7 +149,7 @@ app.include_router(mlflow_router)
 app.include_router(airflow_router)
 
 # 系统管理
-app.include_router(system_router)
+# app.include_router(system_router)
 
 
 # ----------------------------
