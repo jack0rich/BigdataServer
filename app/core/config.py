@@ -17,15 +17,15 @@ class Settings(BaseSettings):
     HADOOP_USER: str = 'root'
 
     # MLflow 服务配置
-    MLFLOW_HOST: str = "http://mlflow-server"
-    MLFLOW_PORT: int = 5000
+    MLFLOW_HOST: str = "localhost"
+    MLFLOW_PORT: int = 5001
 
     # Airflow 服务配置
-    AIRFLOW_HOST: str = "http://airflow-webserver"
-    AIRFLOW_PORT: int = 8080
+    AIRFLOW_HOST: str = "localhost"
+    AIRFLOW_PORT: int = 7777
 
-    AIRFLOW_USERNAME: str = ''
-    AIRFLOW_PASSWORD: str = ''
+    AIRFLOW_USERNAME: str = 'airflow'
+    AIRFLOW_PASSWORD: str = 'airflow'
 
     # Docker 集群管理配置
     DOCKER_API_URL: str = "http://docker-swarm-manager:2375"
