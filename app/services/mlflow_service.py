@@ -1,5 +1,8 @@
+import json
+import time
+
 import httpx
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Coroutine
 from app.core.config import settings
 from app.utils.logger import logger
 
@@ -54,7 +57,7 @@ class MLflowAPIClient:
             await self.create_registered_model(model_name, description)
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 409:  # 409 Conflict: 说明模型已存在
-                print(f"⚠️ 模型 {model_name} 已存在，跳过注册")
+                self.logger.warning(f"模型 {model_name} 已存在，跳过注册")
             else:
                 raise  # 其他错误则抛出
 
@@ -96,7 +99,7 @@ class MLflowAPIClient:
         payload = {
             "name": model_name,
             "version": str(version),  # 确保 version 为字符串类型
-            "stage": stage.lower(),  # 统一转换为小写
+            "stage": stage.capitalize(),
             "archive_existing_versions": archive_existing_versions
         }
 
@@ -114,7 +117,7 @@ class MLflowAPIClient:
 
         return await self._get(endpoint, f"获取模型 {model_name} v{version} 信息成功")
 
-    async def get_model_versions(self, model_name: str, filter: Optional[str] = None) -> List[Dict]:
+    async def get_model_versions(self, model_name: str, filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         获取模型的所有版本列表
 
@@ -128,20 +131,13 @@ class MLflowAPIClient:
             "max_results": 100
         }
 
-        try:
-            response = await self._post(endpoint, payload)
-            if not response:
-                print(f"⚠️ 获取模型版本失败: MLflow API 返回空响应")
-                return []
-            return response.get("model_versions", [])
+        response = await self._get(f"{endpoint}?filter={payload['filter']}&max_results={payload['max_results']}")
 
-        except httpx.HTTPStatusError as e:
-            print(f"❌ HTTP 错误: {e.response.status_code} - {e.response.text}")
+        if not response:
+            self.logger.warning(f"⚠️ 获取模型版本失败: MLflow API 返回空响应")
             return []
 
-        except Exception as e:
-            print(f"❌ 获取模型版本异常: {str(e)}")
-            return []
+        return response.get("model_versions", [])
 
     async def create_experiment(
             self,
@@ -169,23 +165,49 @@ class MLflowAPIClient:
         try:
             response = await self._post(endpoint, payload, f"实验 {experiment_name} 创建成功")
             return response
-        except self.APIError as e:
-            if "RESOURCE_ALREADY_EXISTS" in str(e):
-                self.logger.warning(f"实验 {experiment_name} 已存在，跳过创建")
-                return {"status": "exists", "message": f"Experiment '{experiment_name}' already exists."}
-            raise
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 409:
+                error_data = e.response.json()
+                if error_data.get("error_code") == "RESOURCE_ALREADY_EXISTS":
+                    self.logger.warning(f"实验 {experiment_name} 已存在，跳过创建")
+                    return {"status": "exists",}
+
+    from typing import Dict, Any
 
     async def delete_model(self, model_name: str) -> Dict[str, Any]:
-        """删除模型（逻辑删除，仍可恢复）"""
+        """
+        删除注册的模型（逻辑删除，仍可恢复）
+
+        :param model_name: 要删除的模型名称（必填）
+        :return: API 响应结果
+        """
         endpoint = "/registered-models/delete"
         payload = {"name": model_name}
-        return await self._post(endpoint, payload, f"模型 {model_name} 已删除")
+
+        response = await self._delete(endpoint, payload, f"✅ 模型 {model_name} 已成功删除")
+
+        if not response:
+            self.logger.warning(f"⚠️ 删除模型失败: MLflow API 返回空响应")
+
+        return response or {}
 
     async def delete_model_version(self, model_name: str, version: int) -> Dict[str, Any]:
-        """删除模型版本"""
+        """
+        删除指定的模型版本
+
+        :param model_name: 模型名称（必填）
+        :param version: 版本号（必填）
+        :return: API 响应结果
+        """
         endpoint = "/model-versions/delete"
         payload = {"name": model_name, "version": str(version)}
-        return await self._post(endpoint, payload, f"模型 {model_name} 版本 {version} 已删除")
+
+        response = await self._delete(endpoint, payload, f"✅ 模型 {model_name} 版本 {version} 已成功删除")
+
+        if not response:
+            self.logger.warning(f"⚠️ 删除模型版本失败: MLflow API 返回空响应")
+
+        return response or {}
 
     async def get_experiment(self, experiment_id: str) -> Dict[str, Any]:
         """获取实验信息"""
@@ -203,7 +225,44 @@ class MLflowAPIClient:
         payload = {"experiment_id": experiment_id, "run_name": run_name}
         return await self._post(endpoint, payload, f"运行 {experiment_id} 已创建")
 
-    async def _post(self, endpoint: str, payload: Dict[str, Any], success_message: Optional[str] = None) -> Dict[str, Any]:
+    async def log_metric(self, run_id: str, key: str, value: float, step: Optional[int] = None) -> Dict[str, Any]:
+        """记录单个指标"""
+        endpoint = "/runs/log-metric"
+        payload = {
+            "run_id": run_id,
+            "key": key,
+            "value": value,
+            "timestamp": int(time.time() * 1000)
+        }
+        if step is not None:
+            payload["step"] = step
+        return await self._post(endpoint, payload, f"记录指标 {key}: {value}")
+
+    async def log_batch(self, run_id: str, metrics: List[Dict[str, Any]] = [], params: List[Dict[str, Any]] = [], tags: List[Dict[str, Any]] = []) -> Dict[str, Any]:
+        """批量记录指标、参数和标签"""
+        endpoint = "/runs/log-batch"
+        payload = {"run_id": run_id, "metrics": metrics, "params": params, "tags": tags}
+        return await self._post(endpoint, payload, "批量记录日志数据")
+
+    async def log_model(self, run_id: str, model_json: str) -> Dict[str, Any]:
+        """记录模型信息"""
+        endpoint = "/runs/log-model"
+        payload = {"run_id": run_id, "model_json": model_json}
+        return await self._post(endpoint, payload, "模型信息已记录")
+
+    async def log_inputs(self, run_id: str, datasets: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """记录输入数据"""
+        endpoint = "/runs/log-inputs"
+        payload = {"run_id": run_id, "datasets": datasets}
+        return await self._post(endpoint, payload, "输入数据已记录")
+
+    async def log_param(self, run_id: str, key: str, value: Any) -> Dict[str, Any]:
+        """记录参数"""
+        endpoint = "/runs/log-parameter"
+        payload = {"run_id": run_id, "key": key, "value": str(value)}
+        return await self._post(endpoint, payload, f"参数 {key}: {value} 已记录")
+
+    async def _post(self, endpoint: str, payload: Dict[str, Any], success_message: Optional[str] = None) -> Any | None:
         """通用 POST 请求方法"""
         try:
             response = await self.client.post(f"{self.base_url}{endpoint}", json=payload)
@@ -212,6 +271,7 @@ class MLflowAPIClient:
                 self.logger.info(success_message)
             return response.json()
         except httpx.HTTPStatusError as e:
+            self.logger.error(f"MLflow API请求失败: {e.request.url} - {e.response.status_code}")
             self._handle_http_error(e)
 
     async def _get(self, endpoint: str, success_message: Optional[str] = None) -> Dict[str, Any]:
@@ -225,8 +285,25 @@ class MLflowAPIClient:
         except httpx.HTTPStatusError as e:
             self._handle_http_error(e)
 
+    async def _delete(self, endpoint: str, payload: Dict[str, Any], success_message: Optional[str] = None) -> Any | None:
+        """通用 DELETE 请求方法，使用 request() 支持 json 参数"""
+        try:
+            response = await self.client.request(
+                "DELETE",
+                f"{self.base_url}{endpoint}",
+                json=payload,  # 直接传递字典，会自动转换为 JSON
+                headers={"Content-Type": "application/json"}  # 可选：明确告知服务器请求体为 JSON
+            )
+            response.raise_for_status()
+            if success_message:
+                self.logger.info(success_message)
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            self._handle_http_error(e)
+
     def _handle_http_error(self, error: httpx.HTTPStatusError):
         """统一处理HTTP错误"""
+        message = ''
         self.logger.error(f"MLflow API请求失败: {error.request.url} - {error.response.status_code}")
         try:
             error_detail = error.response.json().get("error_code", "Unknown error")
@@ -253,9 +330,3 @@ class MLflowAPIClient:
 
     class UnauthorizedError(APIError):
         """认证失败异常"""
-
-
-if __name__ == '__main__':
-    import asyncio
-    c = MLflowAPIClient()
-    asyncio.run(c.test_connection())
