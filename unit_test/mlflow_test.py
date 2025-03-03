@@ -9,7 +9,7 @@ async def test_mlflow_client():
 
     try:
         # 🚀 **测试 1：创建实验**
-        experiment_name = "test_experiment_10"
+        experiment_name = "test_experiment_11"
         print("\n🔹 测试 1：创建实验")
         experiment_response = await client.create_experiment(experiment_name)
         experiment_id = experiment_response["experiment_id"]
@@ -22,7 +22,7 @@ async def test_mlflow_client():
         print(f"✅ 创建运行成功: run_id={run_id}")
 
         # 🚀 **测试 3：注册模型**
-        model_name = "test_model_7"
+        model_name = "test_model_8"
         print("\n🔹 测试 3：注册模型")
         register_response = await client.register_model(run_id, model_name)
         print("✅ 注册模型成功:", register_response)

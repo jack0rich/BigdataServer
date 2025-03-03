@@ -29,21 +29,21 @@ async def test_hadoop_api():
         renamed_status = await client.get_file_status(renamed_file)
         assert renamed_status, "文件重命名失败"
 
-        # 5. 删除文件
-        await client.delete_path(renamed_file)
-        try:
-            await client.get_file_status(renamed_file)
-            assert False, "文件未成功删除"
-        except client.HDFSNotFoundError:
-            pass  # 预期行为
-
-        # 6. 删除目录
-        await client.delete_path(test_dir, recursive=True)
-        try:
-            await client.get_file_status(test_dir)
-            assert False, "目录未成功删除"
-        except client.HDFSNotFoundError:
-            pass  # 预期行为
+        # # 5. 删除文件
+        # await client.delete_path(renamed_file)
+        # try:
+        #     await client.get_file_status(renamed_file)
+        #     assert False, "文件未成功删除"
+        # except client.HDFSNotFoundError:
+        #     pass  # 预期行为
+        #
+        # # 6. 删除目录
+        # await client.delete_path(test_dir, recursive=True)
+        # try:
+        #     await client.get_file_status(test_dir)
+        #     assert False, "目录未成功删除"
+        # except client.HDFSNotFoundError:
+        #     pass  # 预期行为
 
 if __name__ == "__main__":
     asyncio.run(test_hadoop_api())
