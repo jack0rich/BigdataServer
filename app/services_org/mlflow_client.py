@@ -1,10 +1,14 @@
 import mlflow
 from mlflow.tracking import MlflowClient
 from mlflow.exceptions import MlflowException
+import mlflow.pyfunc
 import os
 import requests
+import subprocess
+import json
 from datetime import datetime
 from packaging import version
+
 
 
 class MLflowAPIClient:
@@ -298,6 +302,81 @@ class MLflowAPIClient:
             print(f"模型 '{model_name}' 的版本 {version} 已删除")
         except Exception as e:
             raise Exception(f"删除模型版本失败: {str(e)}")
+
+    # 模型部署
+    def deploy_model(self, model_name, version, host="127.0.0.1", port=5001, background=True):
+        """
+        将注册的模型部署为 REST API 服务。
+
+        :param model_name: 模型名称
+        :param version: 模型版本号
+        :param host: 服务监听的主机地址（默认 127.0.0.1）
+        :param port: 服务监听的端口（默认 5001）
+        :param background: 是否在后台运行服务（默认 True）
+        :return: 服务端点地址
+        """
+        try:
+            model_uri = f"models:/{model_name}/{version}"
+            cmd = [
+                "mlflow", "models", "serve",
+                "-m", model_uri,
+                "--host", host,
+                "--port", str(port),
+                "--no-conda"  # 假设不使用 Conda 环境，直接使用当前环境
+            ]
+
+            if background:
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                print(f"模型 '{model_name}' 版本 {version} 已部署为 REST API 服务，端点: http://{host}:{port}")
+                return f"http://{host}:{port}"
+            else:
+                subprocess.run(cmd, check=True)
+                print(f"模型 '{model_name}' 版本 {version} 已部署为 REST API 服务，端点: http://{host}:{port}")
+                return f"http://{host}:{port}"
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"部署模型失败: {str(e)}")
+        except Exception as e:
+            raise Exception(f"部署模型失败: {str(e)}")
+
+    # 模型推理（本地）
+    def predict_locally(self, model_name, version, input_data):
+        """
+        在本地加载模型并进行推理。
+
+        :param model_name: 模型名称
+        :param version: 模型版本号
+        :param input_data: 输入数据（格式取决于模型）
+        :return: 推理结果
+        """
+        try:
+            model_uri = f"models:/{model_name}/{version}"
+            model = mlflow.pyfunc.load_model(model_uri)
+            prediction = model.predict(input_data)
+            print(f"本地推理完成，输入: {input_data}, 输出: {prediction}")
+            return prediction
+        except Exception as e:
+            raise Exception(f"本地推理失败: {str(e)}")
+
+    # 模型推理（远程）
+    def predict_remotely(self, endpoint, input_data):
+        """
+        通过部署的模型服务端点进行远程推理。
+
+        :param endpoint: 服务端点地址（如 http://127.0.0.1:5001）
+        :param input_data: 输入数据（格式取决于模型）
+        :return: 推理结果
+        """
+        try:
+            headers = {"Content-Type": "application/json"}
+            # 假设输入数据是 JSON 格式，具体格式取决于模型
+            response = requests.post(f"{endpoint}/invocations", json=input_data, headers=headers)
+            response.raise_for_status()
+            prediction = response.json()
+            print(f"远程推理完成，输入: {input_data}, 输出: {prediction}")
+            return prediction
+        except requests.RequestException as e:
+            raise Exception(f"远程推理失败: {str(e)}")
+
 
     # 工件管理
     def log_artifact(self, run_id, local_path, artifact_path=None):
