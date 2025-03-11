@@ -150,6 +150,20 @@ class MLflowAPIClient:
         except Exception as e:
             raise Exception(f"获取运行失败: {str(e)}")
 
+    def get_active_run_id(self):
+        """
+        获取当前活动运行的 ID。
+
+        :return: 运行 ID
+        """
+        try:
+            run = mlflow.active_run()
+            if run:
+                return run.info.run_id
+            raise Exception("当前没有活动运行")
+        except Exception as e:
+            raise Exception(f"获取活动运行 ID 失败: {str(e)}")
+
     def update_run(self, run_id, status):
         """
         更新运行的状态。
@@ -263,6 +277,44 @@ class MLflowAPIClient:
             return models
         except Exception as e:
             raise Exception(f"列出模型失败: {str(e)}")
+
+    def log_model(self, model, artifact_path="model"):
+        """
+        记录模型到 MLflow。
+
+        :param model: 训练好的模型对象
+        :param artifact_path: 模型存储路径（默认 "model"）
+        """
+        try:
+            import mlflow
+            if not mlflow.active_run():
+                raise Exception("没有活动运行，请先调用 start_run 方法")
+
+            # 动态检测模型类型并记录
+            model_type = str(type(model))
+            if 'sklearn' in model_type:
+                import mlflow.sklearn
+                mlflow.sklearn.log_model(model, artifact_path)
+            elif 'tensorflow' in model_type or 'keras' in model_type:
+                import mlflow.tensorflow
+                mlflow.tensorflow.log_model(model, artifact_path)
+            elif 'torch' in model_type:
+                import mlflow.pytorch
+                mlflow.pytorch.log_model(model, artifact_path)
+            else:
+                import mlflow.pyfunc
+                # 将模型包装为 pyfunc 类型
+                class PyFuncModel(mlflow.pyfunc.PythonModel):
+                    def __init__(self, model):
+                        self.model = model
+
+                    def predict(self, context, model_input):
+                        return self.model.predict(model_input)
+
+                mlflow.pyfunc.log_model(artifact_path, python_model=PyFuncModel(model))
+            print(f"模型已记录到 {artifact_path}")
+        except Exception as e:
+            raise Exception(f"记录模型失败: {str(e)}")
 
     def get_model_version(self, model_name, version):
         """

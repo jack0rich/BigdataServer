@@ -16,3 +16,4 @@ mlflow-skinny~=2.20.3
 requests~=2.32.3
 hdfs~=2.7.3
 torch~=2.5.1
+packaging~=24.2
