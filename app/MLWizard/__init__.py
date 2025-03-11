@@ -1,3 +1,3 @@
-from .ml_wizard import MLWizard
+from .wizard import MLWizard
 
 __all__ = ['MLWizard']
