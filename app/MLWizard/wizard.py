@@ -2,8 +2,6 @@ from app.services_org import HadoopAPIClient, MLflowAPIClient
 from abc import ABC, abstractmethod
 import os
 import tempfile
-import mlflow
-from mlflow.tracking import MlflowClient
 
 
 # 定义 DataProcessor 接口
@@ -77,82 +75,116 @@ class MLWizard:
             experiment_name (str): 实验名称
             hdfs_url (str): HDFS 服务地址
             mlflow_tracking_uri (str): MLflow 跟踪服务地址
-            data_processor (DataProcessor): 用户自定义的数据处理对象
-            model_trainer (ModelTrainer): 用户自定义的模型训练对象
+            data_processor: 用户自定义的数据处理对象
+            model_trainer: 用户自定义的模型训练对象
         """
-        self.experiment_name = experiment_name
-        self.hdfs_url = hdfs_url
-        self.mlflow_tracking_uri = mlflow_tracking_uri
-        self.hdfs_client = HadoopAPIClient(remote_ip=hdfs_url.split('://')[1].split(':')[0])
-        self.mlflow_client = MLflowAPIClient(mlflow_tracking_uri)
-        self.data_processor = data_processor
-        self.model_trainer = model_trainer
+        self._experiment_name = experiment_name
+        self._hdfs_url = hdfs_url
+        self._mlflow_tracking_uri = mlflow_tracking_uri
+        self._hdfs_client = HadoopAPIClient(remote_ip=hdfs_url.split('://')[1].split(':')[0])
+        self._mlflow_client = MLflowAPIClient(mlflow_tracking_uri)
+        self._data_processor = data_processor
+        self._model_trainer = model_trainer
 
-        # 创建实验的 STORAGE 存储路径
-        self.hdfs_experiment_dir = f"/experiments/{experiment_name}"
-        self.hdfs_data_dir = f"{self.hdfs_experiment_dir}/data"
-        self.hdfs_client.make_directory(self.hdfs_data_dir)
+        # 创建实验的 HDFS 存储路径
+        self._hdfs_experiment_dir = f"/experiments/{experiment_name}"
+        self._hdfs_data_dir = f"{self._hdfs_experiment_dir}/data"
+        self._hdfs_client.make_directory(self._hdfs_data_dir)
 
         # 创建 MLflow 实验
-        self.experiment_id = self.mlflow_client.create_experiment(experiment_name)
+        self._experiment_id = self._mlflow_client.create_experiment(experiment_name)
 
-    def run(self, local_data_path, fine_tune_data=None):
+    def upload_data(self, local_data_path):
         """
-        执行完整的机器学习流程
+        将本地数据上传到 HDFS
 
         参数:
-            local_data_path (str): 本地数据路径，数据将被上传到 HDFS
-            fine_tune_data (tuple, optional): 微调数据 (X_new, y_new)，可选
+            local_data_path (str): 本地数据路径
+
+        返回:
+            str: HDFS 数据路径
         """
-        # 1. 将本地数据上传到 HDFS
-        hdfs_data_path = self._upload_data(local_data_path)
-
-        # 2. 从 HDFS 下载数据到本地临时目录
-        temp_local_path = self._download_data(hdfs_data_path)
-
-        # 3. 数据加载和预处理
-        raw_data = self.data_processor.load_data(temp_local_path)
-        X, y = self.data_processor.preprocess(raw_data)
-
-        # 4. 模型训练并记录到 MLflow
-        run_id = self.mlflow_client.create_run(self.experiment_id)
-        model = self.model_trainer.train(X, y)
-        self.mlflow_client.log_model(model, "model")
-        self.mlflow_client.update_run(run_id, "FINISHED")
-
-        # 5. 模型注册
-        model_version = self.mlflow_client.register_model(run_id, "model", self.experiment_name)
-        print(f"模型已注册为 '{self.experiment_name}' 版本 {model_version.version}")
-
-        # 6. 可选的模型微调
-        if fine_tune_data:
-            X_new, y_new = fine_tune_data
-            fine_tune_run_id = self.mlflow_client.create_run(self.experiment_id)
-            model = self.model_trainer.fine_tune(model, X_new, y_new)
-            self.mlflow_client.log_model(model, "fine_tuned_model")
-            self.mlflow_client.update_run(fine_tune_run_id, "FINISHED")
-            fine_tuned_version = self.mlflow_client.register_model(fine_tune_run_id, "fine_tuned_model",
-                                                                   self.experiment_name)
-            print(f"微调后的模型已注册为版本 {fine_tuned_version.version}")
-
-        # 7. 模型部署
-        endpoint = self.mlflow_client.deploy_model(self.experiment_name, model_version.version)
-        print(f"模型部署成功，端点: {endpoint}")
-
-        return model
-
-    def _upload_data(self, local_data_path):
-        """将本地数据上传到 HDFS"""
-        hdfs_path = f"{self.hdfs_data_dir}/{os.path.basename(local_data_path)}"
-        self.hdfs_client.upload_file(local_data_path, hdfs_path)
+        hdfs_path = f"{self._hdfs_data_dir}/{os.path.basename(local_data_path)}"
+        self._hdfs_client.upload_file(local_data_path, hdfs_path)
         return hdfs_path
 
-    def _download_data(self, hdfs_path):
-        """从 HDFS 下载数据到本地临时目录"""
+    def download_data(self, hdfs_path):
+        """
+        从 HDFS 下载数据到本地临时目录
+
+        参数:
+            hdfs_path (str): HDFS 数据路径
+
+        返回:
+            str: 本地临时数据路径
+        """
         with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as temp_file:
             temp_local_path = temp_file.name
-        self.hdfs_client.download_file(hdfs_path, temp_local_path)
+        self._hdfs_client.download_file(hdfs_path, temp_local_path)
         return temp_local_path
+
+    def process_data(self, local_path):
+        """
+        加载和预处理数据
+
+        参数:
+            local_path (str): 本地数据路径
+
+        返回:
+            tuple: (X, y) 处理后的特征和标签
+        """
+        raw_data = self._data_processor.load_data(local_path)
+        X, y = self._data_processor.preprocess(raw_data)
+        return X, y
+
+    def train(self, X, y, model_name):
+        """
+        训练模型并注册到 MLflow 模型注册表
+
+        参数:
+            X: 特征数据
+            y: 标签数据
+            model_name (str): 模型名称
+
+        返回:
+            tuple: (model, model_version) 训练好的模型和注册的模型版本对象
+        """
+        run_id = self._mlflow_client.create_run(self._experiment_id)
+        model = self._model_trainer.train(X, y)
+        self._mlflow_client.log_model(model, "model")
+        self._mlflow_client.update_run(run_id, "FINISHED")
+
+        model_version = self._mlflow_client.register_model(run_id, "model", model_name)
+        print(f"模型已注册为 '{model_name}' 版本 {model_version.version}")
+        return model, model_version
+
+    def fine_tune_model(self, model, X_new, y_new):
+        """
+        微调模型并记录到 MLflow
+
+        返回:
+            tuple: (fine_tune_run_id, fine_tuned_model)
+        """
+        fine_tune_run_id = self._mlflow_client.create_run(self._experiment_id)
+        fine_tuned_model = self._model_trainer.fine_tune(model, X_new, y_new)
+        self._mlflow_client.log_model(fine_tuned_model, "fine_tuned_model")
+        self._mlflow_client.update_run(fine_tune_run_id, "FINISHED")
+        return fine_tune_run_id, fine_tuned_model
+
+    def deploy_model(self, model_name, version):
+        """
+        部署模型为 REST API 服务
+
+        参数:
+            model_name (str): 模型名称
+            version (str): 模型版本
+
+        返回:
+            str: 服务端点地址
+        """
+        endpoint = self._mlflow_client.deploy_model(model_name, version)
+        print(f"模型部署成功，端点: {endpoint}")
+        return endpoint
 
 
 # 用户自定义 DataProcessor 示例
@@ -205,5 +237,6 @@ if __name__ == "__main__":
 
     # 运行流程
     local_data_path = "data/train.csv"  # 用户只需提供本地路径
-    wizard.run(local_data_path)
+    wizard.upload_data(local_data_path)
+
 
