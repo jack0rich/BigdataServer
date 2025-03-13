@@ -1,3 +1,3 @@
-from .wizard import MLWizard
+from .wizard import MLWizard, MyModelTrainer, MyDataProcessor
 
-__all__ = ['MLWizard']
+__all__ = ['MLWizard', "MyDataProcessor", "MyModelTrainer"]
